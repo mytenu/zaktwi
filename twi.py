@@ -214,12 +214,20 @@ else:
             username= st.text_input("Enter Username/Nickname")
             password = st.text_input("Enter Password", type= "password") 
             repassword = st.text_input("Repeat Password", type="password")
+            momo_contact= st.text_input("Enter Momo Number")
+            momo_name= st.text_input("Enter Momo Account Name (for payment and verification)")
+            call_contact= st.text_input("Enter Contact (for calls)")
+            email=st.text_input("Enter Email")
             
             if st.form_submit_button("Register"):
                 name = name.strip()
                 username = username.strip()
                 password = password.strip()
                 repassword = repassword.strip()
+                momo_contact=momo_contact.strip()
+                momo_name= momo_name.strip()
+                call_contact= call_contact.strip()
+                email=email.strip()
                 
                 if not name or not username or not password:
                     st.error("Please fill in all fields!")
@@ -233,7 +241,7 @@ else:
                     if username_exists:
                         st.error("Username already exists! Please choose a different one.")
                     else:
-                        client1.append_row([username, password, name])
+                        client1.append_row([name, momo_contact, call_contact, username, password, email, momo_name])
                         st.success("Registration Successful! You can now login.")
     
     with tab1:
@@ -267,6 +275,7 @@ else:
                                 break
                         if not found:
                             st.error("Wrong login details. Please try again.")
+
 
 
 
