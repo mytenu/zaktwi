@@ -58,8 +58,8 @@ def init_connection():
 
 # Initialize connection
 clients = init_connection()
-client1=clients.open("ewe_dataset_users").sheet1
-client2 = clients.open("ewe_dataset").sheet1
+client1=clients.open("twi_users").sheet1
+client2 = clients.open("twi_dataset").sheet1
 
 # Initialize session state for login status
 if 'logged_in' not in st.session_state:
@@ -275,6 +275,7 @@ else:
                                 break
                         if not found:
                             st.error("Wrong login details. Please try again.")
+
 
 
 
