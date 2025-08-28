@@ -42,6 +42,35 @@ client2 = clients.open("twi_dataset").sheet1
 
 
 
+# -----------------------------
+# Caching Helpers (to avoid hitting API quota)
+# -----------------------------
+@st.cache_data(ttl=60)  # cache results for 60 seconds
+def load_users():
+    return client1.get_all_records()
+
+@st.cache_data(ttl=60)
+def load_dataset():
+    return client2.get_all_records()
+
+# --- Light Theme CSS ---
+st.markdown(
+    """
+    <style>
+        .stApp { background-color: #ffffff; color: black; }
+        .stTextInput label, .stTextArea label, .stDateInput label { color: black !important; }
+        .stDataFrame, .stMarkdown, .stHeader, .stSubheader, .stRadio, .stSelectbox label { color: black !important; }
+        .css-1d391kg, .css-1v3fvcr { background-color: #f9f9f9 !important; }
+        div.stButton > button, form button {
+            color: white !important; background-color: #007acc !important;
+            font-weight: bold; border-radius: 8px; padding: 0.4em 1em; border: none;
+        }
+        div.stButton > button:hover, form button:hover { background-color: #005fa3 !important; color: white !important; }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
 # Session state
 if 'logged_in' not in st.session_state:
     st.session_state.logged_in = False
@@ -62,8 +91,8 @@ if st.session_state.logged_in and st.session_state.is_admin:
         st.session_state.is_admin = False
         st.rerun()
 
-    users = client1.get_all_records()
-    dataset = client2.get_all_records()
+    users = load_users()
+    dataset = load_dataset()
 
     st.subheader("📖 Twi-English Dataset")
     df = pd.DataFrame(dataset)
@@ -97,6 +126,7 @@ if st.session_state.logged_in and st.session_state.is_admin:
             for i, user in enumerate(client1.get_all_records(), start=2):
                 if user["username"] == user_to_delete:
                     client1.delete_rows(i)
+                    st.cache_data.clear()  # 🔄 clear cache after mutation
                     st.success(f"Deleted user '{user_to_delete}'")
                     st.rerun()
 
@@ -108,12 +138,13 @@ if st.session_state.logged_in and st.session_state.is_admin:
             rows_to_delete = [i for i, row in enumerate(dataset_rows, start=2) if row["username"] == contrib_user]
             for row_index in reversed(rows_to_delete):
                 client2.delete_rows(row_index)
+            st.cache_data.clear()  # 🔄 clear cache after mutation
             st.success(f"All contributions from '{contrib_user}' deleted")
             st.rerun()
 
 # ----------------- USER DASHBOARD -----------------
 elif st.session_state.logged_in and not st.session_state.is_admin:
-    dataset = client2.get_all_records()
+    dataset = load_dataset()
     df = pd.DataFrame(dataset)
 
     # 🔹 Count current user's entries
@@ -163,6 +194,7 @@ elif st.session_state.logged_in and not st.session_state.is_admin:
                             english.strip(),
                             st.session_state.username
                         ])
+                        st.cache_data.clear()  # 🔄 clear cache after mutation
                         st.success("✅ Entry submitted successfully!")
                         st.balloons()
                         st.rerun()
@@ -202,6 +234,7 @@ elif st.session_state.logged_in and not st.session_state.is_admin:
 
                         if rows_to_add:
                             client2.append_rows(rows_to_add)
+                            st.cache_data.clear()  # 🔄 clear cache after mutation
                             st.success(f"🎉 Inserted {len(rows_to_add)} new rows! 🚫 Skipped {duplicates_skipped} duplicates.")
                             st.rerun()
                         else:
@@ -218,7 +251,7 @@ else:
     with tab2:
         st.subheader("Create New Account")
         with st.form("register_form", clear_on_submit=True):
-            users = client1.get_all_records()
+            users = load_users()
             name = st.text_input("Full Name", placeholder="Enter Full Name")
             username = st.text_input("Username/Nickname", placeholder= "Enter Username/Nickname")
             password = st.text_input("Password", type="password", placeholder="Enter Password")
@@ -227,7 +260,6 @@ else:
             momo_name=st.text_input("MoMo Account Name", placeholder= "Enter MoMo Account Name")
             call_contact= st.text_input("Call Contact", placeholder= "Enter Call Contact")
             email= st.text_input("Email", placeholder= "Enter Email")
-
 
             if st.form_submit_button("Register"):
                 if not name or not username or not password:
@@ -240,12 +272,13 @@ else:
                     st.error("❌ Username already exists")
                 else:
                     client1.append_row([name.strip(), momo_contact.strip(), call_contact.strip(), username.strip(), password.strip(), email.strip(), momo_name.strip()])
+                    st.cache_data.clear()  # 🔄 clear cache after mutation
                     st.success("🎉 Registration successful! Please login.")
 
     with tab1:
         st.subheader("Login to Your Account")
         with st.form("login_form"):
-            users = client1.get_all_records()
+            users = load_users()
             username_in = st.text_input("Username/Nickname", placeholder="Enter Username/Nickname")
             password_in = st.text_input("Password", type="password", placeholder="Enter Password")
 
