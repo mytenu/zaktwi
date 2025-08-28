@@ -61,6 +61,8 @@ if 'username' not in st.session_state:
     st.session_state.username = ""
 if 'is_admin' not in st.session_state:
     st.session_state.is_admin = False
+if 'uploaded_excel' not in st.session_state:   # 🔹 track uploaded excel
+    st.session_state.uploaded_excel = None
 
 st.title("📖 Twi Dataset Hub")
 
@@ -183,10 +185,10 @@ elif st.session_state.logged_in and not st.session_state.is_admin:
                         st.rerun()
 
     with tab_excel:
-        uploaded_file = st.file_uploader("Upload Excel File (.xlsx)", type=["xlsx"])
-        if uploaded_file:
+        st.session_state.uploaded_excel = st.file_uploader("Upload Excel File (.xlsx)", type=["xlsx"])  # 🔹 track file
+        if st.session_state.uploaded_excel:
             try:
-                excel_df = pd.read_excel(uploaded_file)
+                excel_df = pd.read_excel(st.session_state.uploaded_excel)
                 excel_df.columns = [col.strip().lower() for col in excel_df.columns]
                 st.write("✅ Preview of uploaded file:")
                 st.dataframe(excel_df.head())
@@ -218,6 +220,7 @@ elif st.session_state.logged_in and not st.session_state.is_admin:
                         if rows_to_add:
                             client2.append_rows(rows_to_add)
                             st.cache_data.clear()  # 🔄 clear cache after mutation
+                            st.session_state.uploaded_excel = None  # 🔹 clear file so preview disappears
                             st.success(f"🎉 Inserted {len(rows_to_add)} new rows! 🚫 Skipped {duplicates_skipped} duplicates.")
                             st.rerun()
                         else:
@@ -287,4 +290,3 @@ else:
                             st.rerun()
                     if not found:
                         st.error("❌ Wrong login details")
-
