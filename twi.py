@@ -173,34 +173,40 @@ elif st.session_state.logged_in and not st.session_state.is_admin:
         if st.session_state.uploaded_excel:
             try:
                 excel_df = pd.read_excel(st.session_state.uploaded_excel)
-                excel_df.columns = [col.strip().lower() for col in excel_df.columns]
-                st.write("✅ Preview of uploaded file:")
-                st.dataframe(excel_df.head())
-
-                if "twi" in excel_df.columns and "english" in excel_df.columns:
+    
+                # 🔹 Force first col = twi, second col = english (ignore column names)
+                if excel_df.shape[1] < 2:
+                    st.error("❌ Excel file must contain at least two columns (Twi and English).")
+                else:
+                    excel_df = excel_df.iloc[:, :2]  # Take only first two columns
+                    excel_df.columns = ["twi", "english"]  # Rename to standard
+    
+                    st.write("✅ Preview of uploaded file (first two columns as Twi & English):")
+                    st.dataframe(excel_df.head())
+    
                     if st.button("Insert All Rows into Google Sheet"):
                         today_str = date.today().strftime("%Y-%m-%d")
                         rows_to_add = []
                         duplicates_skipped = 0
-
+    
                         for _, row in excel_df.iterrows():
                             twi_text = str(row["twi"]).strip()
                             eng_text = str(row["english"]).strip()
                             if not twi_text or not eng_text:
                                 continue
-
+    
                             # Check duplication against existing dataset
                             duplicate_found = any(
                                 str(r.get('twi','')).strip().lower() == twi_text.lower() and
                                 str(r.get('english','')).strip().lower() == eng_text.lower()
                                 for r in dataset
                             )
-
+    
                             if duplicate_found:
                                 duplicates_skipped += 1
                                 continue
                             rows_to_add.append([today_str, twi_text, eng_text, st.session_state.username])
-
+    
                         if rows_to_add:
                             client2.append_rows(rows_to_add)
                             st.cache_data.clear()  # 🔄 clear cache after mutation
@@ -209,8 +215,6 @@ elif st.session_state.logged_in and not st.session_state.is_admin:
                             st.rerun()
                         else:
                             st.warning("⚠️The entries already exist.")
-                else:
-                    st.error("❌ Excel file must contain 'twi' and 'english' columns.")
             except Exception as e:
                 st.error(f"❌ Error reading Excel file: {e}")
 
@@ -274,4 +278,5 @@ else:
                             st.rerun()
                     if not found:
                         st.error("❌ Wrong login details")
+
 
