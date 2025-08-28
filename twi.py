@@ -6,170 +6,9 @@ from datetime import date
 import time
 from functools import wraps
 
-# --- Light Theme CSS ---
-st.markdown(
-    """
-    <style>
-        .stApp {
-            background-color: #ffffff;   /* White background */
-            color: black;               /* Black text */
-        }
-        .stTextInput label, .stTextArea label, .stDateInput label {
-            color: black !important;    /* Black form labels */
-        }
-        .stDataFrame, .stMarkdown, .stHeader, .stSubheader, .stRadio, .stSelectbox label {
-            color: black !important;    /* Black text everywhere */
-        }
-        .css-1d391kg, .css-1v3fvcr {   /* Sidebar / container fix */
-            background-color: #f9f9f9 !important;  /* Light gray sidebar */
-        }
-
-        /* ✅ Button Styling */
-        div.stButton > button, form button {
-            color: white !important;       /* White text */
-            background-color: #007acc !important; /* Blue background */
-            font-weight: bold;
-            border-radius: 8px;            /* Rounded corners */
-            padding: 0.4em 1em;
-            border: none;
-        }
-
-        /* Hover effect */
-        div.stButton > button:hover, form button:hover {
-            background-color: #005fa3 !important;  /* Darker blue */
-            color: white !important;
-        }
-    </style>
-    """,
-    unsafe_allow_html=True
-)
-
-# Define scope
-SCOPE = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
-
-# Rate limiting decorator
-def rate_limit(max_calls=1, time_window=1.5):
-    """Decorator to rate limit function calls"""
-    def decorator(func):
-        @wraps(func)
-        def wrapper(*args, **kwargs):
-            current_time = time.time()
-            if not hasattr(wrapper, 'last_called'):
-                wrapper.last_called = 0
-            
-            time_since_last_call = current_time - wrapper.last_called
-            if time_since_last_call < time_window:
-                time.sleep(time_window - time_since_last_call)
-            
-            wrapper.last_called = time.time()
-            return func(*args, **kwargs)
-        return wrapper
-    return decorator
-
-# Load credentials from Streamlit secrets
-@st.cache_resource
-def init_connection():
-    credentials = Credentials.from_service_account_info(
-        st.secrets["gcp_service_account"],
-        scopes=SCOPE
-    )
-    client = gspread.authorize(credentials)
-    return client
-
-# Cached data fetching functions with rate limiting
-@st.cache_data(ttl=30)  # Cache for 30 seconds
-@rate_limit(max_calls=1, time_window=2.0)
-def get_users_data():
-    """Get users data with caching and rate limiting"""
-    try:
-        client = init_connection()
-        users_sheet = client.open("twi_users").sheet1
-        return users_sheet.get_all_records()
-    except Exception as e:
-        st.error(f"Error fetching users data: {str(e)}")
-        return []
-
-@st.cache_data(ttl=15)  # Cache for 15 seconds (shorter for dataset updates)
-@rate_limit(max_calls=1, time_window=2.0)
-def get_dataset_data():
-    """Get dataset data with caching and rate limiting"""
-    try:
-        client = init_connection()
-        dataset_sheet = client.open("twi_dataset").sheet1
-        return dataset_sheet.get_all_records()
-    except Exception as e:
-        st.error(f"Error fetching dataset: {str(e)}")
-        return []
-
-# Rate-limited write operations
-@rate_limit(max_calls=1, time_window=2.0)
-def add_user_data(user_data):
-    """Add user data with rate limiting"""
-    try:
-        client = init_connection()
-        users_sheet = client.open("twi_users").sheet1
-        users_sheet.append_row(user_data)
-        # Clear cache after write
-        get_users_data.clear()
-        return True
-    except Exception as e:
-        st.error(f"Error adding user: {str(e)}")
-        return False
-
-@rate_limit(max_calls=1, time_window=2.0)
-def add_dataset_entry(entry_data):
-    """Add dataset entry with rate limiting"""
-    try:
-        client = init_connection()
-        dataset_sheet = client.open("twi_dataset").sheet1
-        dataset_sheet.append_row(entry_data)
-        # Clear cache after write
-        get_dataset_data.clear()
-        return True
-    except Exception as e:
-        st.error(f"Error adding dataset entry: {str(e)}")
-        return False
-
-@rate_limit(max_calls=1, time_window=2.0)
-def delete_user_by_username(username_to_delete):
-    """Delete user with rate limiting"""
-    try:
-        client = init_connection()
-        users_sheet = client.open("twi_users").sheet1
-        users_list = users_sheet.get_all_records()
-        
-        for i, user in enumerate(users_list, start=2):  # row 2 = first user
-            if str(user.get("username", "")).lower() == username_to_delete.lower():
-                users_sheet.delete_rows(i)
-                get_users_data.clear()  # Clear cache
-                return True
-        return False
-    except Exception as e:
-        st.error(f"Error deleting user: {str(e)}")
-        return False
-
-@rate_limit(max_calls=1, time_window=2.0)
-def delete_contributions_by_username(username):
-    """Delete all contributions by username with rate limiting"""
-    try:
-        client = init_connection()
-        dataset_sheet = client.open("twi_dataset").sheet1
-        dataset_rows = dataset_sheet.get_all_records()
-        
-        rows_to_delete = [i for i, row in enumerate(dataset_rows, start=2) 
-                         if str(row.get("username", "")).lower() == username.lower()]
-
-        for row_index in reversed(rows_to_delete):  # delete bottom-to-top
-            dataset_sheet.delete_rows(row_index)
-            time.sleep(0.5)  # Small delay between deletions
-        
-        get_dataset_data.clear()  # Clear cache
-        return len(rows_to_delete)
-    except Exception as e:
-        st.error(f"Error deleting contributions: {str(e)}")
-        return 0
-
-# Initialize session state for login status
+# -----------------------------
+# Session State
+# -----------------------------
 if 'logged_in' not in st.session_state:
     st.session_state.logged_in = False
 if 'username' not in st.session_state:
@@ -177,249 +16,251 @@ if 'username' not in st.session_state:
 if 'is_admin' not in st.session_state:
     st.session_state.is_admin = False
 
-st.title("Twi Dataset Hub")
+st.title("📖 Twi Dataset Hub")
 
-# Check if user is logged in
-if st.session_state.logged_in:
-    # Admin Dashboard
-    if st.session_state.is_admin:
-        st.header("Admin Dashboard")
-        
-        if st.button("Logout"):
-            st.session_state.logged_in = False
-            st.session_state.username = ""
-            st.session_state.is_admin = False 
-            st.rerun()
-        
-        # Get data using cached functions
-        with st.spinner("Loading data..."):
-            users = get_users_data()
-            dataset = get_dataset_data()
-        
-        st.header("Twi-English Dataset")
-        if dataset:
-            df = pd.DataFrame(dataset)
-            st.dataframe(df)
-        else:
-            st.warning("No dataset entries found or error loading data.")
-        
-        st.header("All users")
-        if users:
-            dff = pd.DataFrame(users)
-            st.dataframe(dff)
-        else:
-            st.warning("No users found or error loading data.")
-        
-        # Admin Statistics
-        st.header("Dataset Statistics")
-        total_entries = len(dataset) if dataset else 0
-        total_users = len(users) if users else 0
-        
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.metric("Total Entries", total_entries)
-        with col2:
-            st.metric("Total Users", total_users)
-        with col3:
-            if total_users > 1:
-                avg_entries = total_entries / max(total_users - 1, 1)
-                st.metric("Avg Entries per User", f"{avg_entries:.1f}")
+# -----------------------------
+# Excel Processing Functions
+# -----------------------------
+def process_excel_file(uploaded_file, username):
+    """Read Excel and let user select Twi/English columns"""
+    try:
+        df = pd.read_excel(uploaded_file)
+        st.subheader("📊 Preview of uploaded file")
+        st.dataframe(df.head())
+
+        st.subheader("🎯 Column Mapping")
+        columns = df.columns.tolist()
+        twi_column = st.selectbox("Select column containing Twi/Ewe:", columns, key=f"twi_col_{username}")
+        eng_column = st.selectbox("Select column containing English:", columns, key=f"eng_col_{username}")
+
+        has_date_column = st.checkbox("File has Date column?", key=f"date_chk_{username}")
+        date_column = None
+        if has_date_column:
+            date_column = st.selectbox("Select Date column:", columns, key=f"date_col_{username}")
+
+        return df, twi_column, eng_column, date_column
+    except Exception as e:
+        st.error(f"❌ Error reading Excel file: {str(e)}")
+        return None, None, None, None
+
+def upload_to_sheets(df, twi_col, eng_col, date_col, username):
+    """Upload valid rows to Google Sheets"""
+    try:
+        upload_data = []
+        today = date.today().strftime("%Y-%m-%d")
+
+        for _, row in df.iterrows():
+            twi_text = str(row[twi_col]).strip() if pd.notna(row[twi_col]) else ""
+            eng_text = str(row[eng_col]).strip() if pd.notna(row[eng_col]) else ""
+            if not twi_text or not eng_text or twi_text.lower() == "nan" or eng_text.lower() == "nan":
+                continue
+
+            if date_col and pd.notna(row[date_col]):
+                try:
+                    entry_date = pd.to_datetime(row[date_col]).strftime("%Y-%m-%d")
+                except:
+                    entry_date = today
             else:
-                st.metric("Avg Entries per User", "0.0")
-        
-        # 🔹 Contribution statistics
-        if dataset and len(dataset) > 0:
-            df = pd.DataFrame(dataset)
-            if "username" in df.columns:
-                st.subheader("User Contribution Statistics")
-                username_counts = df["username"].value_counts().reset_index()
-                username_counts.columns = ["Username", "Entries Count"]
+                entry_date = today
 
-                st.dataframe(username_counts)
-                st.bar_chart(username_counts.set_index("Username"))
-        
-        # 🔹 Delete a user from USERS sheet
-        st.subheader("Manage Users")
-        if users and len(users) > 0:
-            dff = pd.DataFrame(users)
-            if "username" in dff.columns:
-                user_to_delete = st.selectbox("Select user to delete", options=dff["username"].tolist())
-                if st.button("Delete User"):
-                    with st.spinner("Deleting user..."):
-                        if delete_user_by_username(user_to_delete):
-                            st.success(f"User '{user_to_delete}' deleted successfully!")
-                            time.sleep(2)
-                            st.rerun()
-                        else:
-                            st.error("Failed to delete user.")
+            upload_data.append([entry_date, twi_text, eng_text, username])
 
-        # 🔹 Delete all contributions by a username
-        st.subheader("Manage Contributions")
-        if dataset and len(dataset) > 0:
-            df = pd.DataFrame(dataset)
-            if "username" in df.columns:
-                contrib_user = st.selectbox("Select user to delete contributions", 
-                                          options=df["username"].unique().tolist())
-                if st.button("Delete All Contributions"):
-                    with st.spinner("Deleting contributions..."):
-                        deleted_count = delete_contributions_by_username(contrib_user)
-                        if deleted_count > 0:
-                            st.success(f"Deleted {deleted_count} contributions by '{contrib_user}'!")
-                        else:
-                            st.info(f"No contributions found for user '{contrib_user}'")
-                        time.sleep(2)
-                        st.rerun()
-            
-    # Regular User Data Collection Page    
-    else:
-        st.header(f"Welcome, {st.session_state.username}!")
-        
-        # Get fresh data with caching
-        with st.spinner("Loading your statistics..."):
-            dataset = get_dataset_data()
-        
-        # Case-insensitive comparison for user entries
-        user_entries = [row for row in dataset if str(row.get('username', '')).lower() == st.session_state.username.lower()]
-        entry_count = len(user_entries)
-        
-        # Display user statistics - only total entries
-        col1, col2 = st.columns(2)
-        with col1:
-            st.metric("Your Total Entries", entry_count)
-        with col2:
-            if st.button("Logout"):
-                st.session_state.logged_in = False
-                st.session_state.username = ""
-                st.session_state.is_admin = False
-                st.rerun()
-        
-        # Show encouragement message for new users
-        if entry_count == 0:
-            st.info("You haven't made any contributions yet. Use the form below to add your first entry!")
-        
-        # Data Collection Form
-        st.subheader("Data Collection Form")
-        
-        with st.form("data_collection", clear_on_submit=True):
-            select_date = st.date_input("Date", date.today())
-            twi = st.text_area("Enter Twi Sentence (best option minimum 10 words and maximum 15 words)", 
-                             height=100, placeholder="Type your Twi sentence here...")
-            english = st.text_area("Enter English Translation", 
-                                 height=100, placeholder="Type the English translation here...")
-            
-            submitted = st.form_submit_button("Submit Data", use_container_width=True)
-            
-            if submitted:
-                if not twi.strip() or not english.strip():
-                    st.error("Please fill in both Twi sentence and English translation!")
-                else:
-                    # Check for duplicates
-                    duplicate_found = False
-                    for row in dataset:
-                        if (str(row.get('ewe', '')).strip().lower() == twi.strip().lower() and 
-                            str(row.get('english', '')).strip().lower() == english.strip().lower() and
-                            str(row.get('username', '')).lower() == st.session_state.username.lower()):
-                            duplicate_found = True
-                            break
-                    
-                    if duplicate_found:
-                        st.warning("This translation pair already exists in your submissions!")
-                    else:
-                        with st.spinner("Submitting your entry..."):
-                            entry_data = [
-                                select_date.strftime("%Y-%m-%d"),
-                                twi.strip(),
-                                english.strip(),
-                                st.session_state.username,
-                            ]
-                            
-                            if add_dataset_entry(entry_data):
-                                st.success("Data submitted successfully!")
-                                st.balloons()
-                                time.sleep(2)
-                                st.rerun()
-                            else:
-                                st.error("Failed to submit data. Please try again.")
+        # Upload to Sheets
+        for row in upload_data:
+            client2.append_row(row)
 
-else:
-    # Login/Registration Page
-    tab1, tab2 = st.tabs(["Login", "Register"])
-    
-    with tab2:
-        st.subheader("Create New Account")
-        with st.form("Registration", clear_on_submit=True):
-            name = st.text_input("Enter Full Name")
-            username = st.text_input("Enter Username/Nickname")
-            password = st.text_input("Enter Password", type="password") 
-            repassword = st.text_input("Repeat Password", type="password")
-            momo_contact = st.text_input("Enter Momo Number")
-            momo_name = st.text_input("Enter Momo Account Name (for payment and verification)")
-            call_contact = st.text_input("Enter Contact (for calls)")
-            email = st.text_input("Enter Email")
-            
-            if st.form_submit_button("Register"):
-                name = name.strip()
-                username = username.strip()
-                password = password.strip()
-                repassword = repassword.strip()
-                momo_contact = momo_contact.strip()
-                momo_name = momo_name.strip()
-                call_contact = call_contact.strip()
-                email = email.strip()
-                
-                if not name or not username or not password:
-                    st.error("Please fill in all fields!")
-                elif password != repassword:
-                    st.error("Your passwords do not match")
-                elif len(password) < 4:
-                    st.error("Password must be at least 4 characters long")
-                else:
-                    with st.spinner("Checking username availability..."):
-                        users = get_users_data()
-                        username_exists = any(str(user.get('username', '')).lower() == username.lower() for user in users)
-                        
-                        if username_exists:
-                            st.error("Username already exists! Please choose a different one.")
-                        else:
-                            with st.spinner("Creating account..."):
-                                user_data = [name, momo_contact, call_contact, username, password, email, momo_name]
-                                if add_user_data(user_data):
-                                    st.success("Registration Successful! You can now login.")
-                                else:
-                                    st.error("Registration failed. Please try again.")
-    
+        return len(upload_data), len(df) - len(upload_data)
+    except Exception as e:
+        st.error(f"❌ Upload failed: {str(e)}")
+        return 0, 0
+
+# -----------------------------
+# ADMIN DASHBOARD
+# -----------------------------
+if st.session_state.is_admin:
+    st.header("🛠️ Admin Dashboard")
+
+    if st.button("Logout"):
+        st.session_state.logged_in = False
+        st.session_state.username = ""
+        st.session_state.is_admin = False
+        st.rerun()
+
+    users = client1.get_all_records()
+    dataset = client2.get_all_records()
+
+    # Dataset view
+    st.subheader("📖 Twi-English Dataset")
+    df = pd.DataFrame(dataset)
+    st.dataframe(df)
+
+    # Users view with contribution counts
+    st.subheader("👥 All Users with Contributions")
+    dff = pd.DataFrame(users)
+
+    if not dff.empty:
+        # Count contributions
+        contribution_counts = {}
+        for row in dataset:
+            user = row["username"].lower()
+            contribution_counts[user] = contribution_counts.get(user, 0) + 1
+
+        dff["contributions"] = dff["username"].apply(
+            lambda u: contribution_counts.get(u.lower(), 0)
+        )
+
+        # Show users + contributions
+        st.dataframe(dff)
+
+        # Show total per contributor (summary view)
+        st.subheader("📊 Contributions Summary")
+        summary_df = dff[["username", "contributions"]].sort_values(by="contributions", ascending=False)
+        st.table(summary_df)
+
+        # Show grand total
+        total_entries = len(dataset)
+        st.info(f"📝 **Total Dataset Entries: {total_entries}**")
+
+    # -----------------------------
+    # Delete Options
+    # -----------------------------
+    st.subheader("🗑️ Manage Users & Contributions")
+    usernames = [u["username"] for u in users if u["username"].lower() != "admin"]
+    del_user = st.selectbox("Select user", usernames)
+
+    # Delete only the user, keep contributions
+    if st.button("Delete User Only"):
+        all_users = client1.get_all_values()
+        for i, row in enumerate(all_users):
+            if row and row[0].lower() == del_user.lower():
+                client1.delete_rows(i+1)
+                break
+        st.success(f"✅ Deleted user '{del_user}' but kept their contributions")
+        st.rerun()
+
+    # Delete only contributions, keep user
+    if st.button("Delete Contributions Only"):
+        all_data = client2.get_all_values()
+        rows_to_delete = [i for i, row in enumerate(all_data) if len(row) > 3 and row[3].lower() == del_user.lower()]
+        for offset, row_index in enumerate(rows_to_delete):
+            client2.delete_rows(row_index + 1 - offset)
+        st.success(f"✅ Deleted all contributions from '{del_user}' but kept the user")
+        st.rerun()
+
+    # Delete both user and contributions
+    if st.button("Delete User & Contributions"):
+        # Remove user
+        all_users = client1.get_all_values()
+        for i, row in enumerate(all_users):
+            if row and row[0].lower() == del_user.lower():
+                client1.delete_rows(i+1)
+                break
+
+        # Remove contributions
+        all_data = client2.get_all_values()
+        rows_to_delete = [i for i, row in enumerate(all_data) if len(row) > 3 and row[3].lower() == del_user.lower()]
+        for offset, row_index in enumerate(rows_to_delete):
+            client2.delete_rows(row_index + 1 - offset)
+
+        st.success(f"✅ Deleted user '{del_user}' and all their contributions")
+        st.rerun()
+
+    # Upload Excel (admin bulk)
+    st.subheader("📤 Bulk Upload (Excel)")
+    admin_file = st.file_uploader("Upload Excel", type=['xlsx', 'xls'], key="admin_upload")
+    if admin_file:
+        df_preview, twi_col, eng_col, date_col = process_excel_file(admin_file, "admin")
+        if df_preview is not None and twi_col and eng_col:
+            if st.button("🚀 Upload to Google Sheets", key="admin_upload_btn"):
+                uploaded, skipped = upload_to_sheets(df_preview, twi_col, eng_col, date_col, "admin")
+                st.success(f"✅ Uploaded {uploaded} rows, skipped {skipped}")
+
+# -----------------------------
+# USER DASHBOARD
+# -----------------------------
+elif st.session_state.logged_in:
+    st.header(f"👋 Welcome, {st.session_state.username}")
+
+    if st.button("Logout"):
+        st.session_state.logged_in = False
+        st.session_state.username = ""
+        st.session_state.is_admin = False
+        st.rerun()
+
+    # ✅ Show contribution count
+    dataset = client2.get_all_records()
+    my_count = sum(1 for row in dataset if row["username"].lower() == st.session_state.username.lower())
+    st.info(f"📊 You have contributed **{my_count} entries** so far.")
+
+    tab1, tab2 = st.tabs(["📝 Manual Entry", "📁 Excel Upload"])
+
+    # Manual Entry
     with tab1:
-        st.subheader("Login to Your Account")
-        with st.form("Login"):
-            username100 = st.text_input("Enter Username/Nickname")
-            password100 = st.text_input("Enter Password", type="password")
-            
-            if st.form_submit_button("Login"):
-                username100 = username100.strip()
-                password100 = password100.strip()
-                
-                if not username100 or not password100:
-                    st.error("Please enter both username and password")
+        st.subheader("Manual Data Entry")
+        with st.form("manual_form"):
+            selected_date = st.date_input("Select date", value=date.today())
+            twi = st.text_input("Enter Ewe Sentence")
+            eng = st.text_area("Enter English Translation")
+            if st.form_submit_button("Submit"):
+                if twi and eng:
+                    client2.append_row([selected_date.strftime("%Y-%m-%d"), twi, eng, st.session_state.username])
+                    st.success("✅ Entry added!")
                 else:
-                    if username100.lower() == "admin" and password100 == "1345":
-                        st.session_state.logged_in = True
-                        st.session_state.username = "admin"
-                        st.session_state.is_admin = True
-                        st.rerun()
-                    else:
-                        with st.spinner("Verifying credentials..."):
-                            users = get_users_data()
-                            found = False
-                            
-                            for user in users:
-                                if (str(user.get("username", "")).lower() == username100.lower() and 
-                                    str(user.get("password", "")) == password100):
-                                    found = True
-                                    st.session_state.logged_in = True
-                                    st.session_state.username = str(user.get("username", ""))
-                                    st.session_state.is_admin = False
-                                    st.rerun()
-                                    break
-                            
-                            if not found:
-                                st.error("Wrong login details. Please try again.")
+                    st.error("❌ Please fill in both fields")
+
+    # Excel Upload
+    with tab2:
+        st.subheader("📤 Upload from Excel")
+        user_file = st.file_uploader("Upload Excel", type=['xlsx', 'xls'], key="user_upload")
+        if user_file:
+            df_preview, twi_col, eng_col, date_col = process_excel_file(user_file, st.session_state.username)
+            if df_preview is not None and twi_col and eng_col:
+                if st.button("🚀 Upload to Google Sheets", key="user_upload_btn"):
+                    uploaded, skipped = upload_to_sheets(df_preview, twi_col, eng_col, date_col, st.session_state.username)
+                    st.success(f"✅ Uploaded {uploaded} rows, skipped {skipped}")
+
+# -----------------------------
+# LOGIN / REGISTER
+# -----------------------------
+else:
+    tab1, tab2 = st.tabs(["🔑 Login", "📝 Register"])
+
+    # Register
+    with tab2:
+        with st.form("register_form"):
+            users = client1.get_all_records()
+            name = st.text_input("Full Name").strip()
+            username = st.text_input("Username").strip()
+            password = st.text_input("Password", type="password").strip()
+            repass = st.text_input("Repeat Password", type="password").strip()
+            if st.form_submit_button("Register"):
+                if not name or not username or not password:
+                    st.error("❌ Fill all fields")
+                elif password != repass:
+                    st.error("❌ Passwords do not match")
+                elif any(u["username"].lower() == username.lower() for u in users):
+                    st.error("❌ Username exists")
+                else:
+                    client1.append_row([username, password, name])
+                    st.success("🎉 Registered successfully! Please login.")
+
+    # Login
+    with tab1:
+        with st.form("login_form"):
+            users = client1.get_all_records()
+            username_in = st.text_input("Username").strip().lower()
+            password_in = st.text_input("Password", type="password").strip()
+            if st.form_submit_button("Login"):
+                if username_in == "admin" and password_in == "1345":
+                    st.session_state.logged_in = True
+                    st.session_state.username = "admin"
+                    st.session_state.is_admin = True
+                    st.rerun()
+                else:
+                    for user in users:
+                        if user["username"].lower() == username_in and str(user["password"]) == password_in:
+                            st.session_state.logged_in = True
+                            st.session_state.username = username_in
+                            st.session_state.is_admin = False
+                            st.rerun()
+                    st.error("❌ Wrong login details")
