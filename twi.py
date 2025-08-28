@@ -4,35 +4,20 @@ from google.oauth2.service_account import Credentials
 import pandas as pd
 from datetime import date
 
+
 # --- Light Theme CSS ---
 st.markdown(
     """
     <style>
-        .stApp {
-            background-color: #ffffff;
-            color: black;
-        }
-        .stTextInput label, .stTextArea label, .stDateInput label {
-            color: black !important;
-        }
-        .stDataFrame, .stMarkdown, .stHeader, .stSubheader, .stRadio, .stSelectbox label {
-            color: black !important;
-        }
-        .css-1d391kg, .css-1v3fvcr {
-            background-color: #f9f9f9 !important;
-        }
+        .stApp { background-color: #ffffff; color: black; }
+        .stTextInput label, .stTextArea label, .stDateInput label { color: black !important; }
+        .stDataFrame, .stMarkdown, .stHeader, .stSubheader, .stRadio, .stSelectbox label { color: black !important; }
+        .css-1d391kg, .css-1v3fvcr { background-color: #f9f9f9 !important; }
         div.stButton > button, form button {
-            color: white !important;
-            background-color: #007acc !important;
-            font-weight: bold;
-            border-radius: 8px;
-            padding: 0.4em 1em;
-            border: none;
+            color: white !important; background-color: #007acc !important;
+            font-weight: bold; border-radius: 8px; padding: 0.4em 1em; border: none;
         }
-        div.stButton > button:hover, form button:hover {
-            background-color: #005fa3 !important;
-            color: white !important;
-        }
+        div.stButton > button:hover, form button:hover { background-color: #005fa3 !important; color: white !important; }
     </style>
     """,
     unsafe_allow_html=True
@@ -54,6 +39,8 @@ def init_connection():
 clients = init_connection()
 client1 = clients.open("twi_users").sheet1
 client2 = clients.open("twi_dataset").sheet1
+
+
 
 # Session state
 if 'logged_in' not in st.session_state:
@@ -127,13 +114,19 @@ if st.session_state.logged_in and st.session_state.is_admin:
 # ----------------- USER DASHBOARD -----------------
 elif st.session_state.logged_in and not st.session_state.is_admin:
     dataset = client2.get_all_records()
-    user_entries = [row for row in dataset if str(row.get('username','')) == st.session_state.username]
-    entry_count = len(user_entries)
+    df = pd.DataFrame(dataset)
+
+    # 🔹 Count current user's entries
+    if not df.empty and "username" in df.columns:
+        user_entries = df[df["username"] == st.session_state.username]
+        entry_count = len(user_entries)
+    else:
+        entry_count = 0
 
     # Header with stats + logout on SAME LINE
     col1, col2 = st.columns([3,1])
     with col1:
-        st.subheader(f"👋 Welcome, {st.session_state.username}! | 📊 Total Entries: {entry_count}")
+        st.subheader(f"👋 Welcome, {st.session_state.username} 🤗 | Entries = {entry_count}")
     with col2:
         if st.button("Logout"):
             st.session_state.logged_in = False
@@ -141,36 +134,82 @@ elif st.session_state.logged_in and not st.session_state.is_admin:
             st.session_state.is_admin = False
             st.rerun()
 
-    # Data entry form
-    st.subheader("📝 Add New Entry")
-    with st.form("data_form", clear_on_submit=True):
-        select_date = st.date_input("Date", date.today())
-        twi = st.text_area("Enter Twi Sentence (10–15 words preferred)", height=100, placeholder="Type the Twi sentence here...")
-        english = st.text_area("Enter English Translation", height=100, placeholder="Type the English translation here...")
+    # Tabs for entry methods
+    st.subheader("📝 Data Collection Form")
+    tab_manual, tab_excel = st.tabs(["✍️ Manual Entry", "📂 Upload Excel"])
 
-        submitted = st.form_submit_button("Submit Data", use_container_width=True)
-        if submitted:
-            if not twi.strip() or not english.strip():
-                st.error("❌ Please fill in both fields!")
-            else:
-                duplicate_found = any(
-                    str(row.get('twi','')).strip().lower() == twi.strip().lower() and
-                    str(row.get('english','')).strip().lower() == english.strip().lower() and
-                    str(row.get('username','')) == st.session_state.username
-                    for row in dataset
-                )
-                if duplicate_found:
-                    st.warning("⚠️ This translation pair already exists in your submissions.")
+    with tab_manual:
+        with st.form("data_form", clear_on_submit=True):
+            select_date = st.date_input("Date", date.today())
+            twi = st.text_area("Enter Twi Sentence (10–15 words preferred)", height=100, placeholder="Type the Twi sentence here...")
+            english = st.text_area("Enter English Translation", height=100, placeholder="Type the English translation here...")
+
+            submitted = st.form_submit_button("Submit Data", use_container_width=True)
+            if submitted:
+                if not twi.strip() or not english.strip():
+                    st.error("❌ Please fill in both fields!")
                 else:
-                    client2.append_row([
-                        select_date.strftime("%Y-%m-%d"),
-                        twi.strip(),
-                        english.strip(),
-                        st.session_state.username
-                    ])
-                    st.success("✅ Entry submitted successfully!")
-                    st.balloons()
-                    st.rerun()
+                    duplicate_found = any(
+                        str(row.get('twi','')).strip().lower() == twi.strip().lower() and
+                        str(row.get('english','')).strip().lower() == english.strip().lower()
+                        for row in dataset
+                    )
+                    if duplicate_found:
+                        st.warning("⚠️ This translation pair already exists in the dataset.")
+                    else:
+                        client2.append_row([
+                            select_date.strftime("%Y-%m-%d"),
+                            twi.strip(),
+                            english.strip(),
+                            st.session_state.username
+                        ])
+                        st.success("✅ Entry submitted successfully!")
+                        st.balloons()
+                        st.rerun()
+
+    with tab_excel:
+        uploaded_file = st.file_uploader("Upload Excel File (.xlsx)", type=["xlsx"])
+        if uploaded_file:
+            try:
+                excel_df = pd.read_excel(uploaded_file)
+                excel_df.columns = [col.strip().lower() for col in excel_df.columns]
+                st.write("✅ Preview of uploaded file:")
+                st.dataframe(excel_df.head())
+
+                if "twi" in excel_df.columns and "english" in excel_df.columns:
+                    if st.button("Insert All Rows into Google Sheet"):
+                        today_str = date.today().strftime("%Y-%m-%d")
+                        rows_to_add = []
+                        duplicates_skipped = 0
+
+                        for _, row in excel_df.iterrows():
+                            twi_text = str(row["twi"]).strip()
+                            eng_text = str(row["english"]).strip()
+                            if not twi_text or not eng_text:
+                                continue
+
+                            # Check duplication against existing dataset
+                            duplicate_found = any(
+                                str(r.get('twi','')).strip().lower() == twi_text.lower() and
+                                str(r.get('english','')).strip().lower() == eng_text.lower()
+                                for r in dataset
+                            )
+
+                            if duplicate_found:
+                                duplicates_skipped += 1
+                                continue
+                            rows_to_add.append([today_str, twi_text, eng_text, st.session_state.username])
+
+                        if rows_to_add:
+                            client2.append_rows(rows_to_add)
+                            st.success(f"🎉 Inserted {len(rows_to_add)} new rows! 🚫 Skipped {duplicates_skipped} duplicates.")
+                            st.rerun()
+                        else:
+                            st.warning("⚠️The entries already exist.")
+                else:
+                    st.error("❌ Excel file must contain 'twi' and 'english' columns.")
+            except Exception as e:
+                st.error(f"❌ Error reading Excel file: {e}")
 
 # ----------------- LOGIN / REGISTER -----------------
 else:
@@ -180,10 +219,15 @@ else:
         st.subheader("Create New Account")
         with st.form("register_form", clear_on_submit=True):
             users = client1.get_all_records()
-            name = st.text_input("Full Name")
-            username = st.text_input("Username/Nickname")
-            password = st.text_input("Password", type="password")
-            repassword = st.text_input("Repeat Password", type="password")
+            name = st.text_input("Full Name", placeholder="Enter Full Name")
+            username = st.text_input("Username/Nickname", placeholder= "Enter Username/Nickname")
+            password = st.text_input("Password", type="password", placeholder="Enter Password")
+            repassword = st.text_input("Repeat Password", type="password", placeholder="Repeat Password")
+            momo_contact= st.text_input("MoMo Contact", placeholder= "Enter MoMo Contact")
+            momo_name=st.text_input("MoMo Account Name", placeholder= "Enter MoMo Account Name")
+            call_contact= st.text_input("Call Contact", placeholder= "Enter Call Contact")
+            email= st.text_input("Email", placeholder= "Enter Email")
+
 
             if st.form_submit_button("Register"):
                 if not name or not username or not password:
@@ -195,15 +239,15 @@ else:
                 elif any(str(user.get("username","")).lower() == username.lower() for user in users):
                     st.error("❌ Username already exists")
                 else:
-                    client1.append_row([username.strip(), password.strip(), name.strip()])
+                    client1.append_row([name.strip(), momo_contact.strip(), call_contact.strip(), username.strip(), password.strip(), email.strip(), momo_name.strip()])
                     st.success("🎉 Registration successful! Please login.")
 
     with tab1:
         st.subheader("Login to Your Account")
         with st.form("login_form"):
             users = client1.get_all_records()
-            username_in = st.text_input("Username/Nickname")
-            password_in = st.text_input("Password", type="password")
+            username_in = st.text_input("Username/Nickname", placeholder="Enter Username/Nickname")
+            password_in = st.text_input("Password", type="password", placeholder="Enter Password")
 
             if st.form_submit_button("Login"):
                 username_in = username_in.strip().lower()
@@ -227,4 +271,3 @@ else:
                             st.rerun()
                     if not found:
                         st.error("❌ Wrong login details")
-
