@@ -3,8 +3,25 @@ import gspread
 from google.oauth2.service_account import Credentials
 import pandas as pd
 from datetime import date
-import time
-from functools import wraps
+# Define scope
+#SCOPE = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+SCOPE = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+
+# Load credentials from Streamlit secrets
+@st.cache_resource
+def init_connection():
+    credentials = Credentials.from_service_account_info(
+        st.secrets["gcp_service_account"],
+        scopes=SCOPE
+    )
+    client = gspread.authorize(credentials)
+    return client
+
+# Initialize connection
+clients = init_connection()
+client1=clients.open("twi_users").sheet1
+client2 = clients.open("twi_dataset").sheet1
+
 
 # -----------------------------
 # Session State
@@ -30,7 +47,7 @@ def process_excel_file(uploaded_file, username):
 
         st.subheader("🎯 Column Mapping")
         columns = df.columns.tolist()
-        twi_column = st.selectbox("Select column containing Twi/Ewe:", columns, key=f"twi_col_{username}")
+        twi_column = st.selectbox("Select column containing Twi:", columns, key=f"twi_col_{username}")
         eng_column = st.selectbox("Select column containing English:", columns, key=f"eng_col_{username}")
 
         has_date_column = st.checkbox("File has Date column?", key=f"date_chk_{username}")
@@ -199,12 +216,17 @@ elif st.session_state.logged_in:
         st.subheader("Manual Data Entry")
         with st.form("manual_form"):
             selected_date = st.date_input("Select date", value=date.today())
-            twi = st.text_input("Enter Ewe Sentence")
+            twi = st.text_area("Enter Twi Sentence")   # ✅ Changed to text_area
             eng = st.text_area("Enter English Translation")
             if st.form_submit_button("Submit"):
                 if twi and eng:
                     client2.append_row([selected_date.strftime("%Y-%m-%d"), twi, eng, st.session_state.username])
                     st.success("✅ Entry added!")
+
+                    # 🔄 Refresh contribution count after each submission
+                    dataset = client2.get_all_records()
+                    my_count = sum(1 for row in dataset if row["username"].lower() == st.session_state.username.lower())
+                    st.info(f"📊 You have contributed **{my_count} entries** so far.")
                 else:
                     st.error("❌ Please fill in both fields")
 
