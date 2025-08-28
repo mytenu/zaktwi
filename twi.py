@@ -5,23 +5,7 @@ import pandas as pd
 from datetime import date
 
 
-# --- Light Theme CSS ---
-st.markdown(
-    """
-    <style>
-        .stApp { background-color: #ffffff; color: black; }
-        .stTextInput label, .stTextArea label, .stDateInput label { color: black !important; }
-        .stDataFrame, .stMarkdown, .stHeader, .stSubheader, .stRadio, .stSelectbox label { color: black !important; }
-        .css-1d391kg, .css-1v3fvcr { background-color: #f9f9f9 !important; }
-        div.stButton > button, form button {
-            color: white !important; background-color: #007acc !important;
-            font-weight: bold; border-radius: 8px; padding: 0.4em 1em; border: none;
-        }
-        div.stButton > button:hover, form button:hover { background-color: #005fa3 !important; color: white !important; }
-    </style>
-    """,
-    unsafe_allow_html=True
-)
+
 
 # Google Sheets setup
 SCOPE = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
@@ -290,3 +274,4 @@ else:
                             st.rerun()
                     if not found:
                         st.error("❌ Wrong login details")
+
