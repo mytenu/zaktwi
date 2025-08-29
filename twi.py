@@ -230,8 +230,9 @@ else:
             username = st.text_input("Username/Nickname", placeholder= "Enter Username/Nickname")
             password = st.text_input("Password", type="password", placeholder="Enter Password")
             repassword = st.text_input("Repeat Password", type="password", placeholder="Repeat Password")
-            momo_contact= st.text_input("MoMo Contact", placeholder= "Enter MoMo Contact")
-            momo_name=st.text_input("MoMo Account Name", placeholder= "Enter MoMo Account Name")
+            momo_contact= st.text_input("Payment Phone Number", placeholder= "Enter Phone Number for Cash Transfer")
+            momo_contact_1= st.text_input("Network provider of Payment Phone Number", placeholder= "Enter the Network provider (Telecel Cash/MoMo/AirtelTigo Cash)")
+            momo_name=st.text_input("Account Name", placeholder= "Enter Account Name of the Payment Phone Number")
             call_contact= st.text_input("Call Contact", placeholder= "Enter Call Contact")
             email= st.text_input("Email", placeholder= "Enter Email")
 
@@ -245,7 +246,7 @@ else:
                 elif any(str(user.get("username","")).lower() == username.lower() for user in users):
                     st.error("❌ Username already exists")
                 else:
-                    client1.append_row([name.strip(), momo_contact.strip(), call_contact.strip(), username.strip(), password.strip(), email.strip(), momo_name.strip()])
+                    client1.append_row([name.strip(), momo_contact.strip(), call_contact.strip(), username.strip(), password.strip(), email.strip(), momo_name.strip(), momo.contact_1.strip()])
                     st.cache_data.clear()  # 🔄 clear cache after mutation
                     st.success("🎉 Registration successful! Please login.")
 
@@ -278,5 +279,6 @@ else:
                             st.rerun()
                     if not found:
                         st.error("❌ Wrong login details")
+
 
 
