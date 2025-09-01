@@ -246,7 +246,7 @@ else:
                 elif any(str(user.get("username","")).lower() == username.lower() for user in users):
                     st.error("❌ Username already exists")
                 else:
-                    client1.append_row([name.strip(), momo_contact.strip(), call_contact.strip(), username.strip(), password.strip(), email.strip(), momo_name.strip(), momo.contact_1.strip()])
+                    client1.append_row([name.strip(), momo_contact.strip(), call_contact.strip(), username.strip(), password.strip(), email.strip(), momo_name.strip(), momo_contact_1.strip()])
                     st.cache_data.clear()  # 🔄 clear cache after mutation
                     st.success("🎉 Registration successful! Please login.")
 
@@ -279,6 +279,7 @@ else:
                             st.rerun()
                     if not found:
                         st.error("❌ Wrong login details")
+
 
 
 
